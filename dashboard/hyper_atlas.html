@@ -1,0 +1,2367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HyperAtlas v4 — Global Hypertension Dashboard</title>
+
+<!-- D3.js v7 -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<!-- TopoJSON client v3 -->
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+
+<style>
+/* =============================================
+   CSS Custom Properties & Dark/Light Mode
+   ============================================= */
+:root {
+  --bg-primary: #f8f9fa;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-header: #1e293b;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --border-color: #e2e8f0;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-light: #dbeafe;
+  --color-prev: #ef4444;
+  --color-treat: #22c55e;
+  --color-cf: #f59e0b;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --transition: 0.2s ease;
+  --tab-height: 48px;
+  --header-height: 60px;
+  --green-convergence: #22c55e;
+  --yellow-convergence: #f59e0b;
+  --red-convergence: #ef4444;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-card: #0f3460;
+  --bg-header: #0d1117;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: #1e3a5f;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-light: #1e3a5f;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.5);
+}
+
+/* =============================================
+   Reset & Base
+   ============================================= */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background var(--transition), color var(--transition);
+}
+
+/* =============================================
+   Header
+   ============================================= */
+.app-header {
+  height: var(--header-height);
+  background: var(--bg-header);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow-md);
+}
+
+.app-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: #fff;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  background: var(--accent);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.logo-sub {
+  font-size: 11px;
+  opacity: 0.65;
+  margin-top: -2px;
+  letter-spacing: 0.5px;
+}
+
+.header-spacer { flex: 1; }
+
+.header-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-pill {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.status-pill.pass { background: rgba(34,197,94,0.2); color: #4ade80; }
+.status-pill.warn { background: rgba(245,158,11,0.2); color: #fbbf24; }
+.status-pill.fail { background: rgba(239,68,68,0.2); color: #f87171; }
+
+.theme-toggle {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background var(--transition);
+}
+
+.theme-toggle:hover { background: rgba(255,255,255,0.2); }
+
+/* =============================================
+   Tab Navigation
+   ============================================= */
+.tabs-nav {
+  background: var(--bg-secondary);
+  border-bottom: 2px solid var(--border-color);
+  display: flex;
+  padding: 0 20px;
+  gap: 0;
+  position: sticky;
+  top: var(--header-height);
+  z-index: 90;
+}
+
+.tab-btn {
+  height: var(--tab-height);
+  padding: 0 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color var(--transition), border-color var(--transition);
+  white-space: nowrap;
+  margin-bottom: -2px;
+}
+
+.tab-btn:hover { color: var(--accent); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.tab-icon { font-size: 16px; }
+
+/* =============================================
+   Tab Panels
+   ============================================= */
+.tab-panel {
+  display: none;
+  padding: 20px;
+  min-height: calc(100vh - var(--header-height) - var(--tab-height));
+}
+
+.tab-panel.active { display: block; }
+
+/* =============================================
+   Cards & Layout
+   ============================================= */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.card-body { padding: 16px 18px; }
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+}
+
+/* =============================================
+   Tab 1 — Global Map
+   ============================================= */
+#tab-map {
+  display: none;
+  padding: 16px;
+}
+
+#tab-map.active { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+
+.map-main { display: flex; flex-direction: column; gap: 12px; }
+
+.map-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.select-styled {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition);
+  min-width: 180px;
+}
+
+.select-styled:focus { border-color: var(--accent); }
+
+.slider-container { display: flex; align-items: center; gap: 8px; }
+
+.year-slider {
+  width: 160px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.year-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 40px;
+}
+
+.map-container {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex: 1;
+}
+
+.map-container[role="application"] { min-height: 460px; }
+
+#world-map-svg {
+  width: 100%;
+  height: 100%;
+  min-height: 460px;
+  display: block;
+}
+
+.map-legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  box-shadow: var(--shadow-md);
+}
+
+.legend-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+#legend-svg { display: block; }
+
+/* Tooltip */
+.map-tooltip {
+  position: fixed;
+  background: var(--bg-header);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 1000;
+  box-shadow: var(--shadow-lg);
+  max-width: 220px;
+}
+
+.map-tooltip.visible { opacity: 1; }
+.tooltip-country { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+.tooltip-value { color: #94a3b8; font-size: 12px; }
+.tooltip-value span { color: #fff; font-weight: 600; }
+
+/* Map sidebar */
+.map-sidebar { display: flex; flex-direction: column; gap: 12px; }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.stat-delta {
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.stat-delta.pos { color: var(--color-treat); }
+.stat-delta.neg { color: var(--color-prev); }
+
+.top-countries { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; }
+
+.top-countries-header {
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.country-rank-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.country-rank-item:last-child { border-bottom: none; }
+.country-rank-item:hover { background: var(--accent-light); }
+
+.rank-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rank-name { flex: 1; font-size: 13px; font-weight: 500; }
+
+.rank-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-prev);
+}
+
+.rank-bar-bg {
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  margin-top: 4px;
+  width: 100%;
+}
+
+.rank-bar { height: 4px; background: var(--color-prev); border-radius: 2px; transition: width 0.4s; }
+
+/* =============================================
+   Tab 2 — Country Explorer
+   ============================================= */
+#tab-country {
+  display: none;
+  padding: 16px;
+}
+
+#tab-country.active { display: flex; flex-direction: column; gap: 16px; }
+
+.country-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+}
+
+.country-search {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 8px 12px 8px 34px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.country-search:focus { border-color: var(--accent); }
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+  font-size: 14px;
+}
+
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 200;
+  display: none;
+}
+
+.search-dropdown.open { display: block; }
+
+.search-option {
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background var(--transition);
+}
+
+.search-option:hover, .search-option.highlighted { background: var(--accent-light); color: var(--accent); }
+
+.export-btn {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background var(--transition);
+  white-space: nowrap;
+}
+
+.export-btn:hover { background: var(--accent-hover); }
+
+.cf-toggles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cf-toggle-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 2px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.cf-toggle-btn.active {
+  border-color: var(--color-cf);
+  background: rgba(245,158,11,0.1);
+  color: var(--color-cf);
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+
+.chart-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; }
+
+.chart-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-title { font-size: 13px; font-weight: 700; color: var(--text-primary); flex: 1; }
+
+.chart-legend { display: flex; gap: 12px; }
+
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-secondary); }
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.chart-body { padding: 8px 12px 12px; position: relative; }
+
+.chart-svg { display: block; width: 100%; }
+
+/* Summary box */
+.summary-box {
+  background: linear-gradient(135deg, var(--accent-light) 0%, var(--bg-card) 100%);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+}
+
+.summary-box-title { font-size: 12px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+
+.summary-scenarios { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.summary-scenario {
+  flex: 1;
+  min-width: 200px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.scenario-name { font-size: 11px; font-weight: 700; color: var(--color-cf); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+
+.scenario-text { font-size: 13px; color: var(--text-primary); line-height: 1.5; }
+
+.scenario-cri { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+/* =============================================
+   Tab 3 — Evidence Dashboard
+   ============================================= */
+#tab-evidence {
+  display: none;
+  padding: 16px;
+}
+
+#tab-evidence.active { display: flex; flex-direction: column; gap: 16px; }
+
+/* Traffic lights */
+.traffic-lights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  align-items: center;
+}
+
+.tl-label { font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
+
+.tl-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tl-badge.pass { background: rgba(34,197,94,0.15); color: var(--green-convergence); border: 1px solid rgba(34,197,94,0.3); }
+.tl-badge.warn { background: rgba(245,158,11,0.15); color: var(--yellow-convergence); border: 1px solid rgba(245,158,11,0.3); }
+.tl-badge.fail { background: rgba(239,68,68,0.15); color: var(--red-convergence); border: 1px solid rgba(239,68,68,0.3); }
+
+.tl-dot { width: 8px; height: 8px; border-radius: 50%; }
+.tl-badge.pass .tl-dot { background: var(--green-convergence); }
+.tl-badge.warn .tl-dot { background: var(--yellow-convergence); }
+.tl-badge.fail .tl-dot { background: var(--red-convergence); }
+
+/* Parameter table */
+.param-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.param-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--bg-card);
+}
+
+.param-table thead tr {
+  background: var(--bg-header);
+  color: #fff;
+}
+
+.param-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.param-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.param-table tr:last-child td { border-bottom: none; }
+
+.param-table tr.row-pass td:first-child { border-left: 3px solid var(--green-convergence); }
+.param-table tr.row-warn td:first-child { border-left: 3px solid var(--yellow-convergence); }
+.param-table tr.row-fail td:first-child { border-left: 3px solid var(--red-convergence); }
+
+.param-table tr:hover td { background: var(--accent-light); }
+
+.convergence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.convergence-badge.pass { background: rgba(34,197,94,0.15); color: var(--green-convergence); }
+.convergence-badge.warn { background: rgba(245,158,11,0.15); color: var(--yellow-convergence); }
+.convergence-badge.fail { background: rgba(239,68,68,0.15); color: var(--red-convergence); }
+
+/* Heatmap */
+.heatmap-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.heatmap-svg { display: block; }
+
+/* Provenance */
+.provenance-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.provenance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0;
+}
+
+.prov-item {
+  padding: 14px 16px;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.prov-item:last-child { border-right: none; }
+
+.prov-key { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+
+.prov-val { font-size: 13px; font-weight: 600; color: var(--text-primary); word-break: break-all; }
+
+.prov-hash {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 6px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 16px 14px;
+  word-break: break-all;
+}
+
+.prov-hash:hover { background: var(--accent-light); }
+
+.copy-hint { font-size: 10px; color: var(--accent); font-weight: 600; white-space: nowrap; }
+
+/* Loading state */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 9999;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
+
+/* Error state */
+.error-panel {
+  padding: 40px;
+  text-align: center;
+  color: var(--red-convergence);
+  font-size: 14px;
+}
+
+.no-data {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Misc */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.badge-blue { background: var(--accent-light); color: var(--accent); }
+
+hr.section-divider {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 4px 0;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Rhat bar */
+.rhat-bar-container { display: flex; align-items: center; gap: 6px; }
+.rhat-bar-bg { width: 60px; height: 6px; background: var(--border-color); border-radius: 3px; flex-shrink: 0; }
+.rhat-bar-fill { height: 6px; border-radius: 3px; }
+
+/* Counterfactual info box */
+.cf-info-box {
+  padding: 10px 14px;
+  background: rgba(245,158,11,0.08);
+  border: 1px dashed var(--color-cf);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="spinner" aria-label="Loading data..."></div>
+  <div class="loading-text">Loading HyperAtlas v4...</div>
+</div>
+
+<!-- Map tooltip (single global) -->
+<div class="map-tooltip" id="map-tooltip" role="tooltip" aria-live="polite"></div>
+
+<!-- =============================================
+     App Header
+     ============================================= -->
+<header class="app-header" role="banner">
+  <div class="app-logo" aria-label="HyperAtlas v4">
+    <div class="logo-icon" aria-hidden="true">H4</div>
+    <div>
+      <div class="logo-text">HyperAtlas v4</div>
+      <div class="logo-sub">Global Hypertension Evidence Dashboard</div>
+    </div>
+  </div>
+  <div class="header-spacer"></div>
+  <div class="header-pills" id="header-status-pills" aria-label="Pipeline status">
+    <!-- Populated by JS -->
+  </div>
+  <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark/light mode" aria-pressed="false">
+    <span id="theme-icon" aria-hidden="true">🌙</span>
+    <span id="theme-label">Dark</span>
+  </button>
+</header>
+
+<!-- =============================================
+     Tab Navigation
+     ============================================= -->
+<nav class="tabs-nav" role="tablist" aria-label="Dashboard sections">
+  <button class="tab-btn active" role="tab" id="tab-btn-map" aria-controls="tab-map" aria-selected="true" data-tab="map">
+    <span class="tab-icon" aria-hidden="true">🌍</span> Global Map
+  </button>
+  <button class="tab-btn" role="tab" id="tab-btn-country" aria-controls="tab-country" aria-selected="false" data-tab="country">
+    <span class="tab-icon" aria-hidden="true">📈</span> Country Explorer
+  </button>
+  <button class="tab-btn" role="tab" id="tab-btn-evidence" aria-controls="tab-evidence" aria-selected="false" data-tab="evidence">
+    <span class="tab-icon" aria-hidden="true">🔬</span> Evidence Dashboard
+  </button>
+</nav>
+
+<!-- =============================================
+     Tab 1: Global Map
+     ============================================= -->
+<div class="tab-panel active" id="tab-map" role="tabpanel" aria-labelledby="tab-btn-map">
+  <!-- Map controls row -->
+  <div class="map-controls">
+    <div class="control-group">
+      <label class="control-label" for="metric-select">Metric</label>
+      <select class="select-styled" id="metric-select" aria-label="Select metric to display">
+        <option value="htn_prevalence_pct">HTN Prevalence (%)</option>
+        <option value="htn_treatment_pct">Treatment Coverage (%)</option>
+        <option value="treatment_gap">Treatment Gap (pp)</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label class="control-label" for="year-slider">Year</label>
+      <div class="slider-container">
+        <input type="range" id="year-slider" class="year-slider" min="2000" max="2024" step="1" value="2020" aria-label="Year selector" aria-valuemin="2000" aria-valuemax="2024" aria-valuenow="2020">
+        <span class="year-label" id="year-display" aria-live="polite">2020</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main map + sidebar grid -->
+  <div style="display: grid; grid-template-columns: 1fr 300px; gap: 14px; margin-top: 12px;" id="map-grid">
+    <!-- Map container -->
+    <div class="map-container" role="application" aria-label="World choropleth map of hypertension data">
+      <svg id="world-map-svg" aria-label="World map" role="img"></svg>
+      <div class="map-legend" aria-label="Map color legend">
+        <div class="legend-title" id="legend-title">Prevalence (%)</div>
+        <svg id="legend-svg" width="180" height="24" aria-label="Color scale bar"></svg>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <!-- Global stats -->
+      <div class="stats-grid">
+        <div class="stat-card" aria-label="Average prevalence">
+          <div class="stat-value" id="stat-avg-prev">—</div>
+          <div class="stat-label">Avg Prevalence</div>
+        </div>
+        <div class="stat-card" aria-label="Average treatment coverage">
+          <div class="stat-value" id="stat-avg-treat">—</div>
+          <div class="stat-label">Avg Treatment</div>
+        </div>
+      </div>
+
+      <!-- Top countries ranking -->
+      <div class="top-countries" aria-label="Top 5 countries by selected metric">
+        <div class="top-countries-header" id="top-countries-header">Top 5 by Metric</div>
+        <div id="top-countries-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =============================================
+     Tab 2: Country Explorer
+     ============================================= -->
+<div class="tab-panel" id="tab-country" role="tabpanel" aria-labelledby="tab-btn-country">
+  <!-- Top bar: search + export -->
+  <div class="country-top-bar">
+    <div class="search-wrap" style="max-width: 280px;">
+      <span class="search-icon" aria-hidden="true">🔍</span>
+      <input type="text" class="country-search" id="country-search"
+             placeholder="Search country..."
+             aria-label="Search and select country"
+             aria-autocomplete="list"
+             aria-controls="search-dropdown-list"
+             autocomplete="off">
+      <div class="search-dropdown" id="search-dropdown-list" role="listbox" aria-label="Country options"></div>
+    </div>
+
+    <!-- HEARTS scenario toggles -->
+    <div class="cf-toggles" role="group" aria-label="HEARTS counterfactual scenarios">
+      <span class="control-label">Scenarios</span>
+      <button class="cf-toggle-btn" id="cf-btn-25pp" data-scenario="plus_25pp" aria-pressed="false" aria-label="Toggle +25pp treatment scenario">+25pp Treatment</button>
+      <button class="cf-toggle-btn" id="cf-btn-80" data-scenario="target_80" aria-pressed="false" aria-label="Toggle 80% target scenario">Target 80%</button>
+    </div>
+
+    <button class="export-btn" id="export-csv-btn" aria-label="Export country data as CSV">
+      <span aria-hidden="true">⬇</span> Export CSV
+    </button>
+  </div>
+
+  <!-- Trajectory charts -->
+  <div class="charts-grid">
+    <!-- Prevalence chart -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">HTN Prevalence Over Time</div>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div>Observed</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#ef4444; opacity:0.3; border-radius:0; width:16px; height:8px;"></div>95% CrI</div>
+        </div>
+      </div>
+      <div class="chart-body">
+        <svg id="prev-chart" class="chart-svg" height="280" aria-label="Prevalence trajectory chart"></svg>
+      </div>
+    </div>
+
+    <!-- Treatment chart -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">Treatment Coverage Over Time</div>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#22c55e;"></div>Observed</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#22c55e; opacity:0.3; border-radius:0; width:16px; height:8px;"></div>95% CrI</div>
+        </div>
+      </div>
+      <div class="chart-body">
+        <svg id="treat-chart" class="chart-svg" height="280" aria-label="Treatment trajectory chart"></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary box -->
+  <div class="summary-box" id="cf-summary-box" aria-label="Counterfactual scenario summary">
+    <div class="summary-box-title">HEARTS Scenario Impact Summary</div>
+    <div class="summary-scenarios" id="cf-summary-content">
+      <div class="no-data" style="padding:12px;">Enable a scenario above to see counterfactual projections.</div>
+    </div>
+  </div>
+</div>
+
+<!-- =============================================
+     Tab 3: Evidence Dashboard
+     ============================================= -->
+<div class="tab-panel" id="tab-evidence" role="tabpanel" aria-labelledby="tab-btn-evidence">
+
+  <!-- Convergence traffic lights -->
+  <div class="traffic-lights" aria-label="Model convergence summary">
+    <span class="tl-label">Convergence:</span>
+    <div id="tl-badges" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+  </div>
+
+  <!-- Parameter table -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Model Parameters — Posterior Summary</div>
+      <div class="badge badge-blue" id="param-count-badge">0 parameters</div>
+    </div>
+    <div class="param-table-wrap">
+      <table class="param-table" aria-label="Model parameter posterior summary">
+        <thead>
+          <tr>
+            <th scope="col">Parameter</th>
+            <th scope="col">Mean</th>
+            <th scope="col">Median</th>
+            <th scope="col">SD</th>
+            <th scope="col">95% CrI Low</th>
+            <th scope="col">95% CrI High</th>
+            <th scope="col">Rhat</th>
+            <th scope="col">ESS</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody id="param-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Coverage heatmap -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Data Coverage Heatmap</div>
+      <div class="badge badge-blue" id="coverage-badge">Columns × Completeness</div>
+    </div>
+    <div class="card-body" style="overflow-x:auto;">
+      <svg id="coverage-heatmap" aria-label="Data coverage heatmap"></svg>
+    </div>
+  </div>
+
+  <!-- Provenance footer -->
+  <div class="provenance-card" aria-label="Pipeline provenance information">
+    <div class="card-header">
+      <div class="card-title">Provenance</div>
+    </div>
+    <div class="provenance-grid" id="provenance-grid"></div>
+    <div id="data-hash-row"></div>
+  </div>
+</div>
+
+<!-- =============================================
+     Application JavaScript
+     ============================================= -->
+<script>
+/* =============================================
+   GLOBAL STATE
+   ============================================= */
+const STATE = {
+  bundle: null,
+  world: null,
+  currentMetric: 'htn_prevalence_pct',
+  currentYear: 2020,
+  selectedCountry: null,
+  activeScenarios: new Set(),
+  darkMode: false,
+  isoToName: {},
+  countryDataByYear: {},  // iso3c -> year -> values
+};
+
+/* =============================================
+   UTILITY HELPERS
+   ============================================= */
+function fmt(v, dp = 1) {
+  if (v == null || isNaN(v)) return '—';
+  return v.toFixed(dp);
+}
+
+function fmtPct(v) {
+  if (v == null || isNaN(v)) return '—';
+  return v.toFixed(1) + '%';
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// ISO 3166 alpha-3 -> numeric (for TopoJSON lookup)
+// We'll build this lookup from the TopoJSON itself
+function getCountryName(iso3c) {
+  return STATE.bundle?.country_names?.[iso3c] || STATE.isoToName[iso3c] || iso3c;
+}
+
+/* =============================================
+   THEME TOGGLE
+   ============================================= */
+function initTheme() {
+  const btn = document.getElementById('theme-toggle');
+  const icon = document.getElementById('theme-icon');
+  const label = document.getElementById('theme-label');
+
+  // Respect system preference
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    setDark(true);
+  }
+
+  btn.addEventListener('click', () => {
+    setDark(!STATE.darkMode);
+  });
+
+  btn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); btn.click(); }
+  });
+
+  function setDark(on) {
+    STATE.darkMode = on;
+    document.documentElement.setAttribute('data-theme', on ? 'dark' : 'light');
+    icon.textContent = on ? '☀️' : '🌙';
+    label.textContent = on ? 'Light' : 'Dark';
+    btn.setAttribute('aria-pressed', String(on));
+    // Re-render map colors if data loaded
+    if (STATE.bundle) {
+      renderMap();
+      drawCoverageHeatmap();
+    }
+  }
+}
+
+/* =============================================
+   TAB NAVIGATION
+   ============================================= */
+function initTabs() {
+  const tabs = document.querySelectorAll('.tab-btn');
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(btn.dataset.tab); }
+      // Arrow key navigation
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        const tabList = Array.from(tabs);
+        const idx = tabList.indexOf(btn);
+        const next = e.key === 'ArrowRight' ? (idx + 1) % tabList.length : (idx - 1 + tabList.length) % tabList.length;
+        tabList[next].focus();
+        activateTab(tabList[next].dataset.tab);
+      }
+    });
+  });
+}
+
+function activateTab(tabName) {
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tabName);
+    b.setAttribute('aria-selected', b.dataset.tab === tabName ? 'true' : 'false');
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    p.classList.toggle('active', p.id === 'tab-' + tabName);
+  });
+
+  // Lazy init on first show
+  if (tabName === 'map' && STATE.bundle) { setTimeout(renderMap, 50); }
+  if (tabName === 'country' && STATE.bundle) { renderCountryCharts(); }
+  if (tabName === 'evidence' && STATE.bundle) { renderEvidenceDashboard(); }
+}
+
+/* =============================================
+   DATA LOADING
+   ============================================= */
+async function loadData() {
+  try {
+    const [bundleResp, worldResp] = await Promise.all([
+      fetch('./bundle.json'),
+      fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+    ]);
+
+    if (!bundleResp.ok) throw new Error('Could not load bundle.json: ' + bundleResp.status);
+    if (!worldResp.ok) throw new Error('Could not load world topology: ' + worldResp.status);
+
+    STATE.bundle = await bundleResp.json();
+    STATE.world = await worldResp.json();
+
+    // Pre-process country data indexed by year
+    preprocessCountryData();
+
+    // Populate ISO->name from TopoJSON
+    buildIsoNameLookup();
+
+    // Render header status
+    renderHeaderStatus();
+
+    // Init available years from bundle
+    initYearSlider();
+
+    // Render initial tab
+    renderMap();
+    initCountryExplorer();
+    renderEvidenceDashboard();
+
+    // Hide loading
+    document.getElementById('loading-overlay').style.display = 'none';
+
+  } catch (err) {
+    const overlay = document.getElementById('loading-overlay');
+    overlay.innerHTML = '<div class="error-panel">Failed to load data: ' + escapeHtml(err.message) + '<br><br><small>Ensure bundle.json is in the same directory as this HTML file.</small></div>';
+    console.error(err);
+  }
+}
+
+function preprocessCountryData() {
+  const countries = STATE.bundle.countries || {};
+  STATE.countryDataByYear = {};
+
+  for (const [iso3c, cdata] of Object.entries(countries)) {
+    const years = cdata.years || [];
+    years.forEach((yr, i) => {
+      if (!STATE.countryDataByYear[yr]) STATE.countryDataByYear[yr] = {};
+      STATE.countryDataByYear[yr][iso3c] = {
+        htn_prevalence_pct: cdata.htn_prevalence_pct?.[i] ?? null,
+        htn_treatment_pct: cdata.htn_treatment_pct?.[i] ?? null,
+        treatment_gap: (cdata.htn_prevalence_pct?.[i] ?? 0) - (cdata.htn_treatment_pct?.[i] ?? 0),
+        post_prev_mean: cdata.post_htn_prevalence_pct?.[i] ?? null,
+        post_treat_mean: cdata.post_htn_treatment_pct?.[i] ?? null,
+        post_prev_low95: cdata.post_htn_prevalence_low95?.[i] ?? null,
+        post_prev_high95: cdata.post_htn_prevalence_high95?.[i] ?? null,
+        post_treat_low95: cdata.post_htn_treatment_low95?.[i] ?? null,
+        post_treat_high95: cdata.post_htn_treatment_high95?.[i] ?? null,
+      };
+    });
+  }
+}
+
+function buildIsoNameLookup() {
+  // TopoJSON countries-110m uses numeric IDs per ISO 3166-1 numeric
+  // We do not have a full lookup table embedded; rely on bundle.country_names
+  // and properties.name if present
+  if (STATE.world?.objects?.countries) {
+    const features = topojson.feature(STATE.world, STATE.world.objects.countries).features;
+    // Some TopoJSON builds include properties.name or properties.NAME
+    features.forEach(f => {
+      const name = f.properties?.name || f.properties?.NAME;
+      const id = f.id;
+      if (name && id) STATE.isoToName[String(id)] = name;
+    });
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* =============================================
+   HEADER STATUS PILLS
+   ============================================= */
+function renderHeaderStatus() {
+  const conv = STATE.bundle?.convergence;
+  if (!conv) return;
+  const container = document.getElementById('header-status-pills');
+  const status = conv.overall_status || 'warn';
+  const classMap = { pass: 'pass', warn: 'warn', fail: 'fail' };
+  container.innerHTML = `
+    <div class="status-pill ${classMap[status] || 'warn'}" title="Overall convergence status">
+      Convergence: ${status.toUpperCase()}
+    </div>
+    <div class="status-pill warn" title="Number of parameters">
+      ${STATE.bundle?.parameters?.length || 0} params
+    </div>
+    <div class="status-pill pass" title="Countries in bundle">
+      ${Object.keys(STATE.bundle?.countries || {}).length} countries
+    </div>
+  `;
+}
+
+/* =============================================
+   YEAR SLIDER
+   ============================================= */
+function initYearSlider() {
+  const allYears = Object.keys(STATE.countryDataByYear).map(Number).sort((a, b) => a - b);
+  const minY = allYears[0] || 2000;
+  const maxY = allYears[allYears.length - 1] || 2024;
+
+  const slider = document.getElementById('year-slider');
+  slider.min = minY;
+  slider.max = maxY;
+  slider.value = clamp(2020, minY, maxY);
+  slider.setAttribute('aria-valuemin', minY);
+  slider.setAttribute('aria-valuemax', maxY);
+  slider.setAttribute('aria-valuenow', slider.value);
+
+  STATE.currentYear = +slider.value;
+  document.getElementById('year-display').textContent = slider.value;
+
+  slider.addEventListener('input', () => {
+    STATE.currentYear = +slider.value;
+    document.getElementById('year-display').textContent = slider.value;
+    slider.setAttribute('aria-valuenow', slider.value);
+    renderMap();
+  });
+}
+
+/* =============================================
+   TAB 1: GLOBAL MAP
+   ============================================= */
+const MAP_METRIC_CONFIG = {
+  htn_prevalence_pct: {
+    label: 'HTN Prevalence (%)',
+    colorScheme: d3.interpolateYlOrRd,
+    domain: [15, 45],
+    format: fmtPct,
+  },
+  htn_treatment_pct: {
+    label: 'Treatment Coverage (%)',
+    colorScheme: d3.interpolateYlGn,
+    domain: [10, 80],
+    format: fmtPct,
+  },
+  treatment_gap: {
+    label: 'Treatment Gap (pp)',
+    colorScheme: (t) => d3.interpolateRdYlGn(1 - t),
+    domain: [-10, 30],
+    format: (v) => (v >= 0 ? '+' : '') + fmtPct(v),
+  },
+};
+
+// Iso3c <-> iso3numeric lookup for limited countries
+const ISO3C_TO_NUM = {
+  GBR: '826', USA: '840', BRA: '076', IND: '356', NGA: '566',
+  CHN: '156', RUS: '643', DEU: '276', FRA: '250', JPN: '392',
+};
+const ISO3C_NAMES = {
+  GBR: 'United Kingdom', USA: 'United States', BRA: 'Brazil',
+  IND: 'India', NGA: 'Nigeria', CHN: 'China', RUS: 'Russia',
+  DEU: 'Germany', FRA: 'France', JPN: 'Japan',
+};
+
+function renderMap() {
+  const svg = d3.select('#world-map-svg');
+  const container = svg.node().parentElement;
+  const W = container.clientWidth || 700;
+  const H = Math.max(container.clientHeight || 460, 420);
+
+  svg.attr('viewBox', `0 0 ${W} ${H}`)
+     .attr('width', W)
+     .attr('height', H);
+
+  const metric = document.getElementById('metric-select').value;
+  STATE.currentMetric = metric;
+  const cfg = MAP_METRIC_CONFIG[metric];
+
+  // Build color scale
+  const colorScale = d3.scaleSequential()
+    .domain(cfg.domain)
+    .interpolator(cfg.colorScheme)
+    .clamp(true);
+
+  // Compute data for current year
+  const yearData = STATE.countryDataByYear[STATE.currentYear] || {};
+
+  // Numeric ID -> value map
+  const valueByNumId = {};
+  for (const [iso3c, vals] of Object.entries(yearData)) {
+    const numId = ISO3C_TO_NUM[iso3c];
+    if (numId) valueByNumId[numId] = vals[metric];
+  }
+
+  // Projection
+  const projection = d3.geoNaturalEarth1()
+    .scale(W / 6.3)
+    .translate([W / 2, H / 2]);
+
+  const pathGen = d3.geoPath().projection(projection);
+
+  const tooltip = document.getElementById('map-tooltip');
+
+  // Get TopoJSON countries
+  const countries = topojson.feature(STATE.world, STATE.world.objects.countries);
+  const borders = topojson.mesh(STATE.world, STATE.world.objects.countries, (a, b) => a !== b);
+
+  svg.selectAll('*').remove();
+
+  // Background (ocean)
+  svg.append('rect')
+    .attr('width', W)
+    .attr('height', H)
+    .attr('fill', STATE.darkMode ? '#0f2340' : '#c8e6f5')
+    .attr('rx', 8);
+
+  const g = svg.append('g');
+
+  // Graticule
+  const graticule = d3.geoGraticule();
+  g.append('path')
+    .datum(graticule())
+    .attr('d', pathGen)
+    .attr('fill', 'none')
+    .attr('stroke', STATE.darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)')
+    .attr('stroke-width', 0.3);
+
+  // Countries
+  g.selectAll('.country')
+    .data(countries.features)
+    .join('path')
+    .attr('class', 'country')
+    .attr('d', pathGen)
+    .attr('fill', d => {
+      const val = valueByNumId[String(d.id)];
+      return val != null ? colorScale(val) : (STATE.darkMode ? '#1e3a5f' : '#d4d4d4');
+    })
+    .attr('stroke', STATE.darkMode ? '#0d1117' : '#fff')
+    .attr('stroke-width', 0.4)
+    .style('cursor', d => valueByNumId[String(d.id)] != null ? 'pointer' : 'default')
+    .attr('tabindex', d => valueByNumId[String(d.id)] != null ? 0 : -1)
+    .attr('role', d => valueByNumId[String(d.id)] != null ? 'button' : null)
+    .attr('aria-label', d => {
+      const val = valueByNumId[String(d.id)];
+      const name = d.properties?.name || String(d.id);
+      return val != null ? `${name}: ${cfg.format(val)}` : null;
+    })
+    .on('mousemove', (event, d) => {
+      const val = valueByNumId[String(d.id)];
+      if (val == null) {
+        tooltip.classList.remove('visible');
+        return;
+      }
+      const name = d.properties?.name || String(d.id);
+      // Find iso3c for this country
+      const iso3c = Object.entries(ISO3C_TO_NUM).find(([, n]) => n === String(d.id))?.[0];
+      const countryVals = iso3c ? (STATE.countryDataByYear[STATE.currentYear]?.[iso3c] || {}) : {};
+      const prevLow = countryVals.post_prev_low95;
+      const prevHigh = countryVals.post_prev_high95;
+      const criText = metric === 'htn_prevalence_pct' && prevLow != null
+        ? `<div class="tooltip-value">95% CrI: <span>${fmt(prevLow)}–${fmt(prevHigh)}%</span></div>`
+        : '';
+
+      tooltip.innerHTML = `
+        <div class="tooltip-country">${escapeHtml(name)}</div>
+        <div class="tooltip-value">${escapeHtml(cfg.label)}: <span>${cfg.format(val)}</span></div>
+        ${criText}
+        <div class="tooltip-value" style="margin-top:6px;font-size:11px;opacity:0.7;">Click to explore</div>
+      `;
+      tooltip.style.left = (event.clientX + 12) + 'px';
+      tooltip.style.top = (event.clientY - 40) + 'px';
+      tooltip.classList.add('visible');
+    })
+    .on('mouseleave', () => tooltip.classList.remove('visible'))
+    .on('click', (event, d) => {
+      const iso3c = Object.entries(ISO3C_TO_NUM).find(([, n]) => n === String(d.id))?.[0];
+      if (!iso3c) return;
+      STATE.selectedCountry = iso3c;
+      activateTab('country');
+      setCountry(iso3c);
+    })
+    .on('keydown', function(event, d) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      }
+    });
+
+  // Borders
+  g.append('path')
+    .datum(borders)
+    .attr('d', pathGen)
+    .attr('fill', 'none')
+    .attr('stroke', STATE.darkMode ? '#0d1117' : '#fff')
+    .attr('stroke-width', 0.5);
+
+  // Zoom + pan
+  const zoom = d3.zoom()
+    .scaleExtent([0.8, 8])
+    .on('zoom', (event) => g.attr('transform', event.transform));
+  svg.call(zoom);
+
+  // Draw legend
+  drawMapLegend(cfg, colorScale);
+
+  // Update sidebar stats
+  updateMapSidebar(yearData, cfg);
+}
+
+function drawMapLegend(cfg, colorScale) {
+  document.getElementById('legend-title').textContent = cfg.label;
+  const svgEl = document.getElementById('legend-svg');
+  const lW = 180, lH = 24;
+  const legendSvg = d3.select(svgEl).attr('width', lW).attr('height', lH + 20);
+  legendSvg.selectAll('*').remove();
+
+  const defs = legendSvg.append('defs');
+  const gradId = 'legend-grad-' + Date.now();
+  const grad = defs.append('linearGradient').attr('id', gradId).attr('x1', '0%').attr('x2', '100%');
+
+  const nStops = 10;
+  d3.range(nStops + 1).forEach(i => {
+    const t = i / nStops;
+    grad.append('stop')
+      .attr('offset', (t * 100) + '%')
+      .attr('stop-color', colorScale(cfg.domain[0] + t * (cfg.domain[1] - cfg.domain[0])));
+  });
+
+  legendSvg.append('rect')
+    .attr('x', 0).attr('y', 0)
+    .attr('width', lW).attr('height', lH - 4)
+    .attr('rx', 3)
+    .attr('fill', `url(#${gradId})`);
+
+  // Tick labels
+  const ticks = [cfg.domain[0], (cfg.domain[0] + cfg.domain[1]) / 2, cfg.domain[1]];
+  ticks.forEach((t, i) => {
+    const x = i === 0 ? 0 : i === 1 ? lW / 2 : lW;
+    legendSvg.append('text')
+      .attr('x', x).attr('y', lH + 12)
+      .attr('text-anchor', i === 0 ? 'start' : i === 1 ? 'middle' : 'end')
+      .attr('fill', STATE.darkMode ? '#94a3b8' : '#64748b')
+      .attr('font-size', 10)
+      .text(cfg.format(t));
+  });
+}
+
+function updateMapSidebar(yearData, cfg) {
+  const values = Object.values(yearData)
+    .map(v => v[STATE.currentMetric])
+    .filter(v => v != null);
+
+  const avg = values.length ? d3.mean(values) : null;
+  document.getElementById('stat-avg-prev').textContent = avg != null ? fmtPct(avg) : '—';
+
+  const treatVals = Object.values(yearData).map(v => v.htn_treatment_pct).filter(v => v != null);
+  const avgTreat = treatVals.length ? d3.mean(treatVals) : null;
+  document.getElementById('stat-avg-treat').textContent = avgTreat != null ? fmtPct(avgTreat) : '—';
+
+  // Top 5 countries
+  const ranked = Object.entries(yearData)
+    .filter(([, v]) => v[STATE.currentMetric] != null)
+    .sort(([, a], [, b]) => b[STATE.currentMetric] - a[STATE.currentMetric])
+    .slice(0, 5);
+
+  const listEl = document.getElementById('top-countries-list');
+  const headerEl = document.getElementById('top-countries-header');
+  headerEl.textContent = `Top 5 by ${cfg.label}`;
+
+  if (ranked.length === 0) {
+    listEl.innerHTML = '<div class="no-data" style="padding:16px;">No data for this year</div>';
+    return;
+  }
+
+  const maxVal = ranked[0]?.[1]?.[STATE.currentMetric] || 1;
+  listEl.innerHTML = ranked.map(([iso3c, vals], i) => {
+    const val = vals[STATE.currentMetric];
+    const pct = (val / maxVal) * 100;
+    const name = getCountryName(iso3c);
+    return `
+      <div class="country-rank-item" role="button" tabindex="0"
+           aria-label="${escapeHtml(name)}: ${cfg.format(val)}"
+           onclick="selectCountryFromMap('${iso3c}')"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCountryFromMap('${iso3c}');}">
+        <div class="rank-num">${i + 1}</div>
+        <div style="flex:1;">
+          <div class="rank-name">${escapeHtml(name)}</div>
+          <div class="rank-bar-bg"><div class="rank-bar" style="width:${pct}%;"></div></div>
+        </div>
+        <div class="rank-val">${cfg.format(val)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function selectCountryFromMap(iso3c) {
+  STATE.selectedCountry = iso3c;
+  activateTab('country');
+  setCountry(iso3c);
+}
+
+/* Metric selector */
+document.getElementById('metric-select').addEventListener('change', () => {
+  STATE.currentMetric = document.getElementById('metric-select').value;
+  renderMap();
+});
+
+/* =============================================
+   TAB 2: COUNTRY EXPLORER
+   ============================================= */
+function initCountryExplorer() {
+  const countries = STATE.bundle?.countries || {};
+  const names = Object.keys(countries).map(iso3c => ({
+    iso3c,
+    name: getCountryName(iso3c),
+  })).sort((a, b) => a.name.localeCompare(b.name));
+
+  const input = document.getElementById('country-search');
+  const dropdown = document.getElementById('search-dropdown-list');
+
+  let highlightIdx = -1;
+
+  function updateDropdown(query) {
+    const q = query.toLowerCase();
+    const matches = names.filter(c => c.name.toLowerCase().includes(q) || c.iso3c.toLowerCase().includes(q));
+    if (matches.length === 0 || query === '') {
+      dropdown.classList.remove('open');
+      return;
+    }
+    dropdown.innerHTML = matches.map((c, i) =>
+      `<div class="search-option" data-iso="${c.iso3c}" data-idx="${i}" role="option" aria-selected="false">${escapeHtml(c.name)} <span style="color:var(--text-muted);font-size:11px;">(${c.iso3c})</span></div>`
+    ).join('');
+    dropdown.classList.add('open');
+    highlightIdx = -1;
+
+    dropdown.querySelectorAll('.search-option').forEach(opt => {
+      opt.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const iso = opt.dataset.iso;
+        input.value = names.find(n => n.iso3c === iso)?.name || iso;
+        dropdown.classList.remove('open');
+        setCountry(iso);
+      });
+    });
+  }
+
+  input.addEventListener('input', () => updateDropdown(input.value));
+  input.addEventListener('focus', () => { if (input.value) updateDropdown(input.value); });
+  input.addEventListener('blur', () => setTimeout(() => dropdown.classList.remove('open'), 200));
+
+  input.addEventListener('keydown', (e) => {
+    const opts = dropdown.querySelectorAll('.search-option');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      highlightIdx = Math.min(highlightIdx + 1, opts.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlightIdx = Math.max(highlightIdx - 1, 0);
+    } else if (e.key === 'Enter' && highlightIdx >= 0) {
+      e.preventDefault();
+      const iso = opts[highlightIdx]?.dataset?.iso;
+      if (iso) {
+        input.value = names.find(n => n.iso3c === iso)?.name || iso;
+        dropdown.classList.remove('open');
+        setCountry(iso);
+      }
+    } else if (e.key === 'Escape') {
+      dropdown.classList.remove('open');
+    }
+    opts.forEach((o, i) => o.classList.toggle('highlighted', i === highlightIdx));
+  });
+
+  // Scenario toggles
+  document.querySelectorAll('.cf-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sc = btn.dataset.scenario;
+      if (STATE.activeScenarios.has(sc)) {
+        STATE.activeScenarios.delete(sc);
+        btn.classList.remove('active');
+        btn.setAttribute('aria-pressed', 'false');
+      } else {
+        STATE.activeScenarios.add(sc);
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
+      }
+      renderCountryCharts();
+    });
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); btn.click(); }
+    });
+  });
+
+  // Export button
+  document.getElementById('export-csv-btn').addEventListener('click', exportCountryCSV);
+
+  // Default country
+  const firstIso = Object.keys(countries)[0];
+  if (firstIso) {
+    STATE.selectedCountry = firstIso;
+    input.value = getCountryName(firstIso);
+    renderCountryCharts();
+  }
+}
+
+function setCountry(iso3c) {
+  STATE.selectedCountry = iso3c;
+  const input = document.getElementById('country-search');
+  input.value = getCountryName(iso3c);
+  renderCountryCharts();
+}
+
+function renderCountryCharts() {
+  const iso3c = STATE.selectedCountry;
+  const cdata = STATE.bundle?.countries?.[iso3c];
+  if (!cdata) {
+    d3.select('#prev-chart').selectAll('*').remove();
+    d3.select('#treat-chart').selectAll('*').remove();
+    return;
+  }
+
+  const years = cdata.years || [];
+  const cfData = STATE.bundle?.counterfactuals?.[iso3c];
+
+  drawTrajectoryChart({
+    svgId: 'prev-chart',
+    years,
+    observed: cdata.htn_prevalence_pct,
+    posterior: cdata.post_htn_prevalence_pct,
+    low95: cdata.post_htn_prevalence_low95,
+    high95: cdata.post_htn_prevalence_high95,
+    color: '#ef4444',
+    yLabel: 'Prevalence (%)',
+    yDomain: null,
+    counterfactuals: [],
+  });
+
+  // Build treatment counterfactuals
+  const cfOverlays = [];
+  if (STATE.activeScenarios.has('plus_25pp') && cfData) {
+    cfOverlays.push({
+      label: '+25pp',
+      color: '#f59e0b',
+      values: cfData.cf_treatment_plus_25pp,
+      low95: cfData.cf_treatment_plus_25pp_low95,
+      high95: cfData.cf_treatment_plus_25pp_high95,
+    });
+  }
+  if (STATE.activeScenarios.has('target_80') && cfData) {
+    cfOverlays.push({
+      label: '80% Target',
+      color: '#8b5cf6',
+      values: cfData.cf_treatment_target_80,
+      low95: cfData.cf_treatment_target_80_low95,
+      high95: cfData.cf_treatment_target_80_high95,
+    });
+  }
+
+  drawTrajectoryChart({
+    svgId: 'treat-chart',
+    years,
+    observed: cdata.htn_treatment_pct,
+    posterior: cdata.post_htn_treatment_pct,
+    low95: cdata.post_htn_treatment_low95,
+    high95: cdata.post_htn_treatment_high95,
+    color: '#22c55e',
+    yLabel: 'Treatment (%)',
+    yDomain: null,
+    counterfactuals: cfOverlays,
+  });
+
+  // Summary box
+  renderCfSummary(iso3c, cfData, years);
+}
+
+function drawTrajectoryChart({ svgId, years, observed, posterior, low95, high95, color, yLabel, yDomain, counterfactuals }) {
+  const svgEl = document.getElementById(svgId);
+  if (!svgEl) return;
+
+  const totalW = svgEl.parentElement?.clientWidth || 460;
+  const H = 280;
+  const margin = { top: 16, right: 24, bottom: 36, left: 48 };
+  const W = totalW - 2; // slight inset
+  const innerW = W - margin.left - margin.right;
+  const innerH = H - margin.top - margin.bottom;
+
+  const svg = d3.select(svgEl)
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('width', W)
+    .attr('height', H);
+
+  svg.selectAll('*').remove();
+
+  if (!years.length) {
+    svg.append('text').attr('x', W/2).attr('y', H/2)
+       .attr('text-anchor','middle').attr('fill','var(--text-muted)').attr('font-size',13)
+       .text('No data available');
+    return;
+  }
+
+  // Compute Y domain
+  let allVals = [...(observed||[]).filter(v=>v!=null), ...(posterior||[]).filter(v=>v!=null),
+                 ...(low95||[]).filter(v=>v!=null), ...(high95||[]).filter(v=>v!=null)];
+  counterfactuals.forEach(cf => {
+    allVals = allVals.concat((cf.values||[]).filter(v=>v!=null),
+                             (cf.low95||[]).filter(v=>v!=null),
+                             (cf.high95||[]).filter(v=>v!=null));
+  });
+
+  const [yMin, yMax] = yDomain || [Math.max(0, d3.min(allVals) - 5), Math.min(100, d3.max(allVals) + 5)];
+
+  const x = d3.scaleLinear().domain(d3.extent(years)).range([0, innerW]);
+  const y = d3.scaleLinear().domain([yMin, yMax]).range([innerH, 0]).nice();
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Grid lines
+  g.append('g')
+    .attr('class','grid')
+    .call(d3.axisLeft(y).tickSize(-innerW).tickFormat(''))
+    .call(ag => ag.select('.domain').remove())
+    .call(ag => ag.selectAll('.tick line')
+      .attr('stroke', STATE.darkMode ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)')
+      .attr('stroke-dasharray','3,3'));
+
+  // 95% CrI ribbon (main)
+  if (low95 && high95 && low95.length === years.length) {
+    const areaGen = d3.area()
+      .defined((_, i) => low95[i] != null && high95[i] != null)
+      .x((_, i) => x(years[i]))
+      .y0((_, i) => y(low95[i]))
+      .y1((_, i) => y(high95[i]))
+      .curve(d3.curveCatmullRom.alpha(0.5));
+
+    g.append('path')
+      .datum(years)
+      .attr('d', areaGen)
+      .attr('fill', color)
+      .attr('fill-opacity', 0.15)
+      .attr('stroke', 'none');
+  }
+
+  // Counterfactual ribbons
+  counterfactuals.forEach(cf => {
+    if (cf.low95 && cf.high95 && cf.low95.length === years.length) {
+      const cfArea = d3.area()
+        .defined((_, i) => cf.low95[i] != null && cf.high95[i] != null)
+        .x((_, i) => x(years[i]))
+        .y0((_, i) => y(cf.low95[i]))
+        .y1((_, i) => y(cf.high95[i]))
+        .curve(d3.curveCatmullRom.alpha(0.5));
+      g.append('path')
+        .datum(years)
+        .attr('d', cfArea)
+        .attr('fill', cf.color)
+        .attr('fill-opacity', 0.12)
+        .attr('stroke', 'none');
+    }
+
+    // CF line
+    if (cf.values && cf.values.length === years.length) {
+      const cfLine = d3.line()
+        .defined((_, i) => cf.values[i] != null)
+        .x((_, i) => x(years[i]))
+        .y((_, i) => y(cf.values[i]))
+        .curve(d3.curveCatmullRom.alpha(0.5));
+      g.append('path')
+        .datum(years)
+        .attr('d', cfLine)
+        .attr('fill', 'none')
+        .attr('stroke', cf.color)
+        .attr('stroke-width', 1.8)
+        .attr('stroke-dasharray', '5,3');
+
+      // Label
+      const lastIdx = cf.values.reduceRight((acc, v, i) => acc === -1 && v != null ? i : acc, -1);
+      if (lastIdx >= 0) {
+        g.append('text')
+          .attr('x', x(years[lastIdx]) + 4)
+          .attr('y', y(cf.values[lastIdx]))
+          .attr('fill', cf.color)
+          .attr('font-size', 10)
+          .attr('font-weight', 700)
+          .attr('dy', '0.35em')
+          .text(cf.label);
+      }
+    }
+  });
+
+  // Posterior mean line
+  if (posterior && posterior.length === years.length) {
+    const lineGen = d3.line()
+      .defined((_, i) => posterior[i] != null)
+      .x((_, i) => x(years[i]))
+      .y((_, i) => y(posterior[i]))
+      .curve(d3.curveCatmullRom.alpha(0.5));
+    g.append('path')
+      .datum(years)
+      .attr('d', lineGen)
+      .attr('fill','none')
+      .attr('stroke', color)
+      .attr('stroke-width', 2.2);
+  }
+
+  // Observed points
+  if (observed && observed.length === years.length) {
+    g.selectAll('.obs-dot')
+      .data(years.map((yr, i) => ({ yr, v: observed[i] })).filter(d => d.v != null))
+      .join('circle')
+      .attr('class','obs-dot')
+      .attr('cx', d => x(d.yr))
+      .attr('cy', d => y(d.v))
+      .attr('r', 4)
+      .attr('fill', color)
+      .attr('stroke', STATE.darkMode ? '#1a1a2e' : '#fff')
+      .attr('stroke-width', 1.5);
+  }
+
+  // Axes
+  const xAxis = d3.axisBottom(x).tickFormat(d3.format('d')).ticks(6);
+  const yAxis = d3.axisLeft(y).ticks(5).tickFormat(d => d + '%');
+
+  const axisColor = STATE.darkMode ? '#64748b' : '#94a3b8';
+  const labelColor = STATE.darkMode ? '#94a3b8' : '#64748b';
+
+  g.append('g')
+    .attr('transform', `translate(0,${innerH})`)
+    .call(xAxis)
+    .call(ag => ag.select('.domain').attr('stroke', axisColor))
+    .call(ag => ag.selectAll('.tick line').attr('stroke', axisColor))
+    .call(ag => ag.selectAll('.tick text').attr('fill', labelColor).attr('font-size', 11));
+
+  g.append('g')
+    .call(yAxis)
+    .call(ag => ag.select('.domain').attr('stroke', axisColor))
+    .call(ag => ag.selectAll('.tick line').attr('stroke', axisColor))
+    .call(ag => ag.selectAll('.tick text').attr('fill', labelColor).attr('font-size', 11));
+
+  // Y axis label
+  g.append('text')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -innerH / 2)
+    .attr('y', -38)
+    .attr('text-anchor','middle')
+    .attr('fill', labelColor)
+    .attr('font-size', 11)
+    .text(yLabel);
+}
+
+function renderCfSummary(iso3c, cfData, years) {
+  const container = document.getElementById('cf-summary-content');
+  if (!STATE.activeScenarios.size) {
+    container.innerHTML = '<div class="no-data" style="padding:12px;">Enable a scenario above to see counterfactual projections.</div>';
+    return;
+  }
+
+  const name = getCountryName(iso3c);
+  const lastYrIdx = (years || []).length - 1;
+
+  let html = '';
+
+  if (STATE.activeScenarios.has('plus_25pp') && cfData) {
+    const delta = cfData.cf_treatment_plus_25pp_delta?.[lastYrIdx];
+    const val25 = cfData.cf_treatment_plus_25pp?.[lastYrIdx];
+    const low = cfData.cf_treatment_plus_25pp_low95?.[lastYrIdx];
+    const high = cfData.cf_treatment_plus_25pp_high95?.[lastYrIdx];
+    html += `
+      <div class="summary-scenario">
+        <div class="scenario-name">+25pp Treatment</div>
+        <div class="scenario-text">
+          Under +25pp treatment in <strong>${escapeHtml(name)}</strong>:
+          coverage increases to <strong>${fmtPct(val25)}</strong>
+        </div>
+        <div class="scenario-cri">95% CrI: ${fmtPct(low)} – ${fmtPct(high)} &nbsp;|&nbsp; Δ = +${fmtPct(delta)}</div>
+      </div>
+    `;
+  }
+
+  if (STATE.activeScenarios.has('target_80') && cfData) {
+    const val80 = cfData.cf_treatment_target_80?.[lastYrIdx];
+    const delta80 = cfData.cf_treatment_target_80_delta?.[lastYrIdx];
+    const low80 = cfData.cf_treatment_target_80_low95?.[lastYrIdx];
+    const high80 = cfData.cf_treatment_target_80_high95?.[lastYrIdx];
+    html += `
+      <div class="summary-scenario">
+        <div class="scenario-name">80% Coverage Target</div>
+        <div class="scenario-text">
+          Under 80% target in <strong>${escapeHtml(name)}</strong>:
+          coverage reaches <strong>${fmtPct(val80)}</strong>
+        </div>
+        <div class="scenario-cri">95% CrI: ${fmtPct(low80)} – ${fmtPct(high80)} &nbsp;|&nbsp; Δ = +${fmtPct(delta80)}</div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html || '<div class="no-data" style="padding:12px;">No counterfactual data available for this country.</div>';
+}
+
+function exportCountryCSV() {
+  const iso3c = STATE.selectedCountry;
+  const cdata = STATE.bundle?.countries?.[iso3c];
+  if (!iso3c || !cdata) return;
+
+  const cfData = STATE.bundle?.counterfactuals?.[iso3c] || {};
+  const years = cdata.years || [];
+
+  const headers = [
+    'iso3c','country_name','year',
+    'htn_prevalence_pct','htn_treatment_pct','treatment_gap',
+    'post_prev_mean','post_prev_low95','post_prev_high95',
+    'post_treat_mean','post_treat_low95','post_treat_high95',
+    'cf_treat_plus25pp','cf_treat_target80',
+  ];
+
+  const rows = years.map((yr, i) => [
+    iso3c,
+    getCountryName(iso3c),
+    yr,
+    fmt(cdata.htn_prevalence_pct?.[i]),
+    fmt(cdata.htn_treatment_pct?.[i]),
+    fmt((cdata.htn_prevalence_pct?.[i]||0)-(cdata.htn_treatment_pct?.[i]||0)),
+    fmt(cdata.post_htn_prevalence_pct?.[i]),
+    fmt(cdata.post_htn_prevalence_low95?.[i]),
+    fmt(cdata.post_htn_prevalence_high95?.[i]),
+    fmt(cdata.post_htn_treatment_pct?.[i]),
+    fmt(cdata.post_htn_treatment_low95?.[i]),
+    fmt(cdata.post_htn_treatment_high95?.[i]),
+    fmt(cfData.cf_treatment_plus_25pp?.[i]),
+    fmt(cfData.cf_treatment_target_80?.[i]),
+  ]);
+
+  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `hyper_atlas_${iso3c}_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* =============================================
+   TAB 3: EVIDENCE DASHBOARD
+   ============================================= */
+function renderEvidenceDashboard() {
+  renderTrafficLights();
+  renderParamTable();
+  drawCoverageHeatmap();
+  renderProvenance();
+}
+
+function renderTrafficLights() {
+  const conv = STATE.bundle?.convergence;
+  if (!conv) return;
+
+  const container = document.getElementById('tl-badges');
+  const nPass = conv.parameters ? Object.values(conv.parameters).filter(p=>p.status==='pass').length : 0;
+  const nWarn = conv.n_warn || 0;
+  const nFail = conv.n_fail || 0;
+
+  container.innerHTML = `
+    <div class="tl-badge pass" aria-label="${nPass} parameters passed convergence">
+      <div class="tl-dot"></div> ${nPass} Passed
+    </div>
+    <div class="tl-badge warn" aria-label="${nWarn} parameters have warnings">
+      <div class="tl-dot"></div> ${nWarn} Warn
+    </div>
+    <div class="tl-badge fail" aria-label="${nFail} parameters failed convergence">
+      <div class="tl-dot"></div> ${nFail} Failed
+    </div>
+    <div class="tl-badge ${conv.overall_status === 'pass' ? 'pass' : conv.overall_status === 'fail' ? 'fail' : 'warn'}"
+         aria-label="Overall convergence: ${conv.overall_status}">
+      <div class="tl-dot"></div>
+      Overall: ${(conv.overall_status||'?').toUpperCase()}
+    </div>
+  `;
+}
+
+function renderParamTable() {
+  const params = STATE.bundle?.parameters || [];
+  const convParams = STATE.bundle?.convergence?.parameters || {};
+
+  document.getElementById('param-count-badge').textContent = params.length + ' parameters';
+
+  const tbody = document.getElementById('param-table-body');
+  if (!params.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="no-data">No parameters loaded</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = params.map(p => {
+    const conv = convParams[p.parameter] || {};
+    const status = conv.status || 'pass';
+    const rhat = conv.rhat;
+    const ess = conv.ess;
+
+    // Rhat color bar (ideal is 1.0, warn >1.01, fail >1.05)
+    const rhatVal = rhat || 1.0;
+    const rhatFrac = Math.min((rhatVal - 0.99) / 0.06, 1);
+    const rhatColor = rhatVal < 1.01 ? '#22c55e' : rhatVal < 1.05 ? '#f59e0b' : '#ef4444';
+
+    // Format parameter name
+    const paramName = p.parameter.replace(/_/g, '_').replace(/beta_/g, 'β_').replace(/sigma_/g, 'σ_');
+
+    return `
+      <tr class="row-${status}" aria-label="Parameter ${p.parameter}">
+        <td style="font-family:'Courier New',monospace;font-size:12px;">${escapeHtml(paramName)}</td>
+        <td>${fmt(p.mean, 3)}</td>
+        <td>${fmt(p.median, 3)}</td>
+        <td>${fmt(p.sd, 3)}</td>
+        <td>${fmt(p.low95, 3)}</td>
+        <td>${fmt(p.high95, 3)}</td>
+        <td>
+          <div class="rhat-bar-container">
+            <span style="font-size:12px;font-family:'Courier New',monospace;">${rhat != null ? rhat.toFixed(4) : '—'}</span>
+            <div class="rhat-bar-bg"><div class="rhat-bar-fill" style="width:${(rhatFrac*60)}px;background:${rhatColor};height:6px;border-radius:3px;"></div></div>
+          </div>
+        </td>
+        <td style="font-family:'Courier New',monospace;font-size:12px;">${ess != null ? Math.round(ess) : '—'}</td>
+        <td>
+          <span class="convergence-badge ${status}" aria-label="Status: ${status}">
+            ${status.toUpperCase()}
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function drawCoverageHeatmap() {
+  const coverage = STATE.bundle?.coverage || [];
+  if (!coverage.length) return;
+
+  const svgEl = document.getElementById('coverage-heatmap');
+  const container = svgEl.parentElement;
+  const W = container.clientWidth || 700;
+
+  const margin = { top: 10, right: 20, bottom: 60, left: 160 };
+  const rowH = 32;
+  const H = margin.top + margin.bottom + coverage.length * rowH;
+  const innerW = W - margin.left - margin.right;
+
+  const svg = d3.select(svgEl)
+    .attr('width', W)
+    .attr('height', H)
+    .attr('viewBox', `0 0 ${W} ${H}`);
+
+  svg.selectAll('*').remove();
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Color scale: 0% = red, 100% = green
+  const colorScale = d3.scaleSequential()
+    .domain([0, 100])
+    .interpolator(d3.interpolateRdYlGn);
+
+  const barMaxW = innerW * 0.7;
+
+  coverage.forEach((row, i) => {
+    const pct = row.pct_complete || 0;
+    const barW = (pct / 100) * barMaxW;
+    const rowY = i * rowH;
+    const textColor = STATE.darkMode ? '#e2e8f0' : '#1e293b';
+    const mutedColor = STATE.darkMode ? '#64748b' : '#94a3b8';
+
+    // Row label
+    g.append('text')
+      .attr('x', -8)
+      .attr('y', rowY + rowH/2)
+      .attr('text-anchor','end')
+      .attr('dominant-baseline','middle')
+      .attr('fill', textColor)
+      .attr('font-size', 12)
+      .attr('font-family', "'Courier New', monospace")
+      .text(row.column);
+
+    // Background bar
+    g.append('rect')
+      .attr('x', 0).attr('y', rowY + 6)
+      .attr('width', barMaxW).attr('height', rowH - 12)
+      .attr('fill', STATE.darkMode ? '#1e3a5f' : '#f1f5f9')
+      .attr('rx', 4);
+
+    // Filled bar
+    if (barW > 0) {
+      g.append('rect')
+        .attr('x', 0).attr('y', rowY + 6)
+        .attr('width', barW).attr('height', rowH - 12)
+        .attr('fill', colorScale(pct))
+        .attr('rx', 4)
+        .attr('opacity', 0.85);
+    }
+
+    // Percentage label
+    g.append('text')
+      .attr('x', barMaxW + 10)
+      .attr('y', rowY + rowH/2)
+      .attr('dominant-baseline','middle')
+      .attr('fill', pct === 100 ? '#22c55e' : pct === 0 ? '#ef4444' : '#f59e0b')
+      .attr('font-size', 12)
+      .attr('font-weight', 700)
+      .text(pct.toFixed(0) + '%');
+
+    // Counts
+    g.append('text')
+      .attr('x', barMaxW + 52)
+      .attr('y', rowY + rowH/2)
+      .attr('dominant-baseline','middle')
+      .attr('fill', mutedColor)
+      .attr('font-size', 11)
+      .text(`${row.n_non_null}/${row.n_total}`);
+  });
+
+  // Header
+  g.append('text')
+    .attr('x', barMaxW/2).attr('y', H - margin.bottom + 16)
+    .attr('text-anchor','middle')
+    .attr('fill', STATE.darkMode ? '#64748b' : '#94a3b8')
+    .attr('font-size', 11)
+    .text('% Complete');
+}
+
+function renderProvenance() {
+  const prov = STATE.bundle?.provenance;
+  if (!prov) return;
+
+  const fields = [
+    { key: 'seed', label: 'Random Seed' },
+    { key: 'timestamp', label: 'Timestamp' },
+    { key: 'n_countries', label: 'Countries' },
+    { key: 'n_years', label: 'Years' },
+    { key: 'n_draws', label: 'MCMC Draws' },
+    { key: 'convergence_status', label: 'Conv. Status' },
+    { key: 'n_warn', label: 'Warnings' },
+    { key: 'n_fail', label: 'Failures' },
+  ];
+
+  const grid = document.getElementById('provenance-grid');
+  grid.innerHTML = fields.map(f => {
+    const val = prov[f.key];
+    let displayVal = val != null ? String(val) : '—';
+    if (f.key === 'timestamp' && displayVal !== '—') {
+      try { displayVal = new Date(displayVal).toLocaleString(); } catch(e) {}
+    }
+    return `
+      <div class="prov-item" aria-label="${f.label}: ${displayVal}">
+        <div class="prov-key">${escapeHtml(f.label)}</div>
+        <div class="prov-val">${escapeHtml(displayVal)}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Data hash row
+  const hashRow = document.getElementById('data-hash-row');
+  if (prov.data_hash) {
+    hashRow.innerHTML = `
+      <div class="prov-hash" role="button" tabindex="0" aria-label="Copy data hash to clipboard"
+           onclick="copyHash('${escapeHtml(prov.data_hash)}')"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();copyHash('${escapeHtml(prov.data_hash)}');}">
+        <span>SHA-256: <strong>${escapeHtml(prov.data_hash)}</strong></span>
+        <span class="copy-hint" id="copy-hint-text">Click to copy</span>
+      </div>
+    `;
+  }
+}
+
+function copyHash(hash) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(hash).then(() => {
+      const hint = document.getElementById('copy-hint-text');
+      if (hint) { hint.textContent = 'Copied!'; setTimeout(() => { hint.textContent = 'Click to copy'; }, 2000); }
+    }).catch(() => fallbackCopy(hash));
+  } else {
+    fallbackCopy(hash);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+}
+
+/* =============================================
+   RESIZE HANDLER
+   ============================================= */
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (STATE.bundle) {
+      const activeTab = document.querySelector('.tab-panel.active')?.id;
+      if (activeTab === 'tab-map') renderMap();
+      if (activeTab === 'tab-country') renderCountryCharts();
+      if (activeTab === 'tab-evidence') drawCoverageHeatmap();
+    }
+  }, 200);
+});
+
+/* =============================================
+   BOOT
+   ============================================= */
+initTheme();
+initTabs();
+loadData();
+</script>
+</body>
+</html>
