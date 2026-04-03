@@ -102,8 +102,8 @@ def compute_ess(draws: np.ndarray, max_lag: int = 100) -> float:
 def _get_draws_by_name(result: Any, name: str) -> Optional[np.ndarray]:
     """Map a parameter name from parameter_summary() to its draws array.
 
-    Handles scalar parameters (alpha, sigma_*) and vector parameters
-    (beta_prev_*, beta_treat_*).
+    Handles scalar parameters (alpha, sigma_*, phi_*) and vector parameters
+    (beta_prev_*, beta_treat_*, gamma_*, delta_*).
     """
     # Scalar draws
     scalar_map = {
@@ -114,9 +114,18 @@ def _get_draws_by_name(result: Any, name: str) -> Optional[np.ndarray]:
         "sigma_obs_treat2": result.sigma_obs_treat2_draws,
         "sigma_u_prev2": result.sigma_u_prev2_draws,
         "sigma_u_treat2": result.sigma_u_treat2_draws,
+        "phi_prev": getattr(result, "phi_prev_draws", None),
+        "phi_treat": getattr(result, "phi_treat_draws", None),
+        "sigma_ihd2": getattr(result, "sigma_ihd2_draws", None),
+        "sigma_stroke2": getattr(result, "sigma_stroke2_draws", None),
+        "sigma_v_ihd2": getattr(result, "sigma_v_ihd2_draws", None),
+        "sigma_v_stroke2": getattr(result, "sigma_v_stroke2_draws", None),
     }
     if name in scalar_map:
-        return scalar_map[name]
+        draws = scalar_map[name]
+        if draws is not None and len(draws) > 0:
+            return draws
+        return None
 
     # Vector beta coefficients: beta_prev_<covariate> or beta_treat_<covariate>
     covariate_names = ["intercept", "log_gdp_z", "health_exp_z", "urban_z", "year_z"]
@@ -130,6 +139,21 @@ def _get_draws_by_name(result: Any, name: str) -> Optional[np.ndarray]:
                 j = covariate_names.index(cname)
                 if j < draws_matrix.shape[1]:
                     return draws_matrix[:, j]
+
+    # Task 5A: CVD coefficient vectors gamma_<name>, delta_<name>
+    cvd_coef_names = ["intercept", "prev", "treat", "gdp"]
+    for prefix, attr_name in [
+        ("gamma_", "gamma_draws"),
+        ("delta_", "delta_draws"),
+    ]:
+        if name.startswith(prefix):
+            cname = name[len(prefix):]
+            if cname in cvd_coef_names:
+                draws_matrix = getattr(result, attr_name, None)
+                if draws_matrix is not None and draws_matrix.ndim == 2:
+                    j = cvd_coef_names.index(cname)
+                    if j < draws_matrix.shape[1]:
+                        return draws_matrix[:, j]
 
     return None
 

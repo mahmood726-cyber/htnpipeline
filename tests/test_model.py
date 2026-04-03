@@ -210,3 +210,92 @@ class TestTruthCertBundle:
         assert "data_hash" in prov
         assert "n_countries" in prov
         assert prov["seed"] == 42
+
+
+# ---------------------------------------------------------------------------
+# Task 5C: Edge-case tests
+# ---------------------------------------------------------------------------
+
+
+class TestMeasurementError:
+    def test_latent_differs_from_observed(self):
+        """Latent states should differ from raw observed (measurement error model working)."""
+        df = make_synthetic_panel(n_countries=5, n_years=5)
+        g = StateSpaceGibbs(seed=42, n_iter=200, burn=50, thin=1)
+        r = g.fit(df)
+        obs = r.panel["htn_prevalence_pct"].to_numpy()
+        post = r.latent_prev_draws.mean(axis=0)
+        diffs = np.abs(post - obs)
+        assert (diffs > 0.1).sum() > len(post) * 0.1
+
+    def test_latent_correlates_with_observed(self):
+        """Posterior latent means should correlate strongly with observed."""
+        df = make_synthetic_panel(n_countries=5, n_years=5, seed=99)
+        g = StateSpaceGibbs(seed=42, n_iter=500, burn=200, thin=1)
+        r = g.fit(df)
+        obs = r.panel["htn_prevalence_pct"].to_numpy()
+        post = r.latent_prev_draws.mean(axis=0)
+        corr = np.corrcoef(obs, post)[0, 1]
+        assert corr > 0.8
+
+
+class TestBetaConvergence:
+    def test_intercept_near_true_value(self):
+        """With enough data, prevalence intercept should be near 30."""
+        df = make_synthetic_panel(n_countries=20, n_years=5, seed=42)
+        g = StateSpaceGibbs(seed=42, n_iter=500, burn=200, thin=1)
+        r = g.fit(df)
+        assert abs(r.beta_prev_draws[:, 0].mean() - 30.0) < 5.0
+
+
+class TestEdgeCases:
+    def test_single_country(self):
+        """Sampler handles n_country=1."""
+        df = make_synthetic_panel(n_countries=1, n_years=5, seed=42)
+        g = StateSpaceGibbs(seed=42, n_iter=100, burn=30, thin=1)
+        r = g.fit(df)
+        assert len(r.alpha_draws) > 0
+
+    def test_two_time_points(self):
+        """Sampler handles minimal n_years=2."""
+        df = make_synthetic_panel(n_countries=5, n_years=2, seed=42)
+        g = StateSpaceGibbs(seed=42, n_iter=100, burn=30, thin=1)
+        r = g.fit(df)
+        assert len(r.alpha_draws) > 0
+
+    def test_missing_urban_covariate(self):
+        """Sampler works when urban_z column is all NaN."""
+        df = make_synthetic_panel(n_countries=5, n_years=3, seed=42)
+        df["urban_z"] = np.nan
+        g = StateSpaceGibbs(seed=42, n_iter=100, burn=30, thin=1)
+        r = g.fit(df)
+        assert len(r.alpha_draws) > 0
+        # Design matrix should have 4 columns (no urban)
+        assert r.beta_prev_draws.shape[1] == 4
+
+
+class TestAR1:
+    def test_phi_stays_in_bounds(self):
+        """AR(1) phi must stay within (-0.95, 0.95)."""
+        df = make_synthetic_panel(n_countries=5, n_years=5)
+        g = StateSpaceGibbs(seed=42, n_iter=200, burn=50, thin=1)
+        r = g.fit(df)
+        assert (r.phi_prev_draws > -0.95).all()
+        assert (r.phi_prev_draws < 0.95).all()
+        assert (r.phi_treat_draws > -0.95).all()
+        assert (r.phi_treat_draws < 0.95).all()
+
+
+class TestProvenanceHash:
+    def test_provenance_hash_matches_input(self, tmp_path):
+        """Hash in provenance.json matches SHA-256 of input panel CSV."""
+        import hashlib
+        import json
+        df = make_synthetic_panel()
+        g = StateSpaceGibbs(seed=42, n_iter=100, burn=30, thin=1)
+        r = g.fit(df)
+        generate_bundle(r, df, bundle_dir=tmp_path, seed=42)
+        expected_hash = hashlib.sha256(df.to_csv(index=False).encode("utf-8")).hexdigest()
+        with open(tmp_path / "provenance.json") as f:
+            prov = json.load(f)
+        assert prov["data_hash"] == expected_hash

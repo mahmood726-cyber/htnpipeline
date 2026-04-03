@@ -66,6 +66,22 @@ def _build_posterior_draws_df(result: Any) -> pd.DataFrame:
         cname = covariate_names[j] if j < len(covariate_names) else f"x{j}"
         data[f"beta_treat_{cname}"] = result.beta_treat_draws[:, j]
 
+    # Task 5B: AR(1) phi parameters
+    if hasattr(result, "phi_prev_draws") and len(result.phi_prev_draws) > 0:
+        data["phi_prev"] = result.phi_prev_draws
+        data["phi_treat"] = result.phi_treat_draws
+
+    # Task 5A: CVD parameters
+    if getattr(result, "has_cvd", False):
+        cvd_coef_names = ["intercept", "prev", "treat", "gdp"]
+        for j, cname in enumerate(cvd_coef_names):
+            data[f"gamma_{cname}"] = result.gamma_draws[:, j]
+            data[f"delta_{cname}"] = result.delta_draws[:, j]
+        data["sigma_ihd2"] = result.sigma_ihd2_draws
+        data["sigma_stroke2"] = result.sigma_stroke2_draws
+        data["sigma_v_ihd2"] = result.sigma_v_ihd2_draws
+        data["sigma_v_stroke2"] = result.sigma_v_stroke2_draws
+
     data["draw_index"] = np.arange(n_draws)
     return pd.DataFrame(data)
 
