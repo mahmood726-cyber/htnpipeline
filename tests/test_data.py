@@ -128,3 +128,107 @@ class TestIndicatorRegistry:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Tasks 3 + 4 tests (12 new)
+# ---------------------------------------------------------------------------
+import numpy as np
+import pandas as pd
+from data.who import filter_who_sex, harmonize_who_observations
+from data.worldbank import worldbank_fixture
+from data.harmonize import zscore_series, prepare_model_panel
+
+
+class TestWHOSexFilter:
+    def test_btsx_only_survives(self):
+        df = pd.DataFrame({
+            "SpatialDim": ["GBR", "GBR", "GBR"],
+            "TimeDim": [2019, 2019, 2019],
+            "NumericValue": [30.0, 35.0, 25.0],
+            "Dim1": ["BTSX", "MLE", "FMLE"],
+        })
+        result = filter_who_sex(df)
+        assert len(result) == 1
+        assert result.iloc[0]["Dim1"] == "BTSX"
+
+    def test_missing_dim1_deduplicates(self):
+        df = pd.DataFrame({
+            "SpatialDim": ["GBR", "GBR"],
+            "TimeDim": [2019, 2019],
+            "NumericValue": [30.0, 31.0],
+        })
+        result = filter_who_sex(df)
+        assert len(result) == 1
+
+    def test_no_duplicate_country_year_after_harmonize(self):
+        df = pd.DataFrame({
+            "SpatialDim": ["GBR", "GBR", "USA"],
+            "TimeDim": [2019, 2019, 2019],
+            "NumericValue": [30.0, 35.0, 28.0],
+            "Dim1": ["BTSX", "MLE", "BTSX"],
+        })
+        result = harmonize_who_observations(df, "htn_prev_pct")
+        dupes = result.groupby(["iso3c", "year"]).size()
+        assert (dupes <= 1).all()
+
+
+class TestFixtures:
+    def test_worldbank_fixture_deterministic(self):
+        df1 = worldbank_fixture(2015, 2019, seed=42)
+        df2 = worldbank_fixture(2015, 2019, seed=42)
+        pd.testing.assert_frame_equal(df1, df2)
+
+    def test_worldbank_fixture_30_countries(self):
+        df = worldbank_fixture(2015, 2019, seed=42)
+        assert df["iso3c"].nunique() == 30
+
+    def test_worldbank_fixture_year_range(self):
+        df = worldbank_fixture(2015, 2019, seed=42)
+        assert df["year"].min() == 2015
+        assert df["year"].max() == 2019
+
+
+class TestZscore:
+    def test_normal_zscore(self):
+        s = pd.Series([10.0, 20.0, 30.0])
+        z = zscore_series(s)
+        assert abs(z.mean()) < 1e-10
+        assert abs(z.std(ddof=1) - 1.0) < 0.01
+
+    def test_all_identical_returns_zeros(self):
+        s = pd.Series([5.0, 5.0, 5.0, 5.0])
+        z = zscore_series(s)
+        assert (z == 0.0).all()
+        assert not z.isna().any()
+
+    def test_single_value_returns_zero(self):
+        s = pd.Series([42.0])
+        z = zscore_series(s)
+        assert z.iloc[0] == 0.0
+
+    def test_ddof1_used(self):
+        s = pd.Series([10.0, 20.0])
+        z = zscore_series(s)
+        assert abs(z.iloc[0] - (-0.7071)) < 0.01
+
+
+class TestColumnValidation:
+    def test_missing_required_columns_raises(self):
+        df = pd.DataFrame({"iso3c": ["GBR"], "year": [2019], "gdp_pc_usd": [46000]})
+        with pytest.raises(ValueError, match="Missing required columns"):
+            prepare_model_panel(df, required_outcomes=["htn_prevalence_pct", "htn_treatment_pct"])
+
+    def test_valid_panel_passes(self):
+        df = pd.DataFrame({
+            "iso3c": ["GBR", "USA"],
+            "year": [2019, 2019],
+            "gdp_pc_usd": [46000.0, 65000.0],
+            "health_exp_pct_gdp": [10.2, 16.7],
+            "urban_pct": [83.9, 82.7],
+            "htn_prevalence_pct": [30.0, 28.0],
+            "htn_treatment_pct": [55.0, 50.0],
+        })
+        result = prepare_model_panel(df, required_outcomes=["htn_prevalence_pct", "htn_treatment_pct"])
+        assert "log_gdp_z" in result.columns
+        assert "country_id" in result.columns
