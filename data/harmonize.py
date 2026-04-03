@@ -41,7 +41,7 @@ def zscore_series(s: pd.Series) -> pd.Series:
     return (s - s.mean()) / std
 
 
-def build_panel(config: Config) -> pd.DataFrame:
+def build_panel(config: Config) -> tuple[pd.DataFrame, dict[str, str]]:
     """Fetch all registered indicators and merge into a single panel.
 
     Uses ``registry.fetch_all`` (which catches per-indicator failures) then
@@ -55,10 +55,18 @@ def build_panel(config: Config) -> pd.DataFrame:
 
     Returns
     -------
-    pd.DataFrame
-        Wide-format panel sorted by ``iso3c``, ``year``.
+    tuple[pd.DataFrame, dict[str, str]]
+        - Wide-format panel sorted by ``iso3c``, ``year``.
+        - Indicator source metadata mapping indicator name -> source identifier.
     """
     dfs = registry.fetch_all(config.start_year, config.end_year, config)
+
+    # Build sources metadata from registry
+    from data.indicators import registry as _reg
+    sources: dict[str, str] = {
+        name: _reg.get_metadata(name).get("source", "unknown")
+        for name in _reg.list_indicators()
+    }
 
     panel: pd.DataFrame | None = None
     for name, df in dfs.items():
@@ -74,14 +82,21 @@ def build_panel(config: Config) -> pd.DataFrame:
             panel = panel.merge(df, on=["iso3c", "year"], how="outer")
 
     if panel is None:
-        return pd.DataFrame()
+        return pd.DataFrame(), sources
 
     # Filter to configured year range
     panel = panel[
         (panel["year"] >= config.start_year) & (panel["year"] <= config.end_year)
     ].copy()
 
-    return panel.sort_values(["iso3c", "year"]).reset_index(drop=True)
+    panel = panel.sort_values(["iso3c", "year"]).reset_index(drop=True)
+
+    # Optionally limit to first N countries (for smoke tests)
+    if config.max_countries is not None:
+        keep = panel["iso3c"].drop_duplicates().head(config.max_countries)
+        panel = panel[panel["iso3c"].isin(keep)].copy()
+
+    return panel, sources
 
 
 def prepare_model_panel(

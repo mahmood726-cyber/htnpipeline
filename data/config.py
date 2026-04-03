@@ -10,7 +10,7 @@ class Config:
     start_year: int = 2000
     end_year: int = 2024
     outdir: Path = field(default_factory=lambda: Path("v4_output"))
-    bundle_dir: Path = field(default_factory=lambda: Path("bundle"))
+    bundle_dir: Path = field(default_factory=lambda: Path("v4_output/bundle"))
     max_countries: int | None = None
     session_sleep_sec: float = 0.15
     seed: int = 2026

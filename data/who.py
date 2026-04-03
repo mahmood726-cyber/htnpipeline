@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import warnings
 
+import numpy as np
 import pandas as pd
 
 from data.http_client import get_json
@@ -12,6 +13,86 @@ from data.registry import validate_indicator_code
 logger = logging.getLogger(__name__)
 
 _WHO_GHO_BASE = "https://ghoapi.azureedge.net/api"
+
+# Fixture baseline values per country (iso3c, base_htn_prev, base_htn_treat)
+# Values are synthetic but calibrated to plausible WHO GHO ranges (2015 era).
+_WHO_FIXTURE_COUNTRIES: list[tuple[str, float, float]] = [
+    ("GBR", 28.0, 64.0),
+    ("USA", 29.0, 55.0),
+    ("DEU", 30.0, 58.0),
+    ("FRA", 27.0, 60.0),
+    ("JPN", 32.0, 62.0),
+    ("CAN", 24.0, 68.0),
+    ("AUS", 26.0, 66.0),
+    ("ITA", 33.0, 57.0),
+    ("ESP", 29.0, 56.0),
+    ("KOR", 28.0, 54.0),
+    ("BRA", 31.0, 48.0),
+    ("MEX", 34.0, 45.0),
+    ("ARG", 38.0, 49.0),
+    ("COL", 33.0, 42.0),
+    ("CHL", 30.0, 52.0),
+    ("CHN", 27.0, 38.0),
+    ("IND", 25.0, 22.0),
+    ("IDN", 26.0, 20.0),
+    ("THA", 24.0, 30.0),
+    ("VNM", 22.0, 28.0),
+    ("NGA", 29.0, 12.0),
+    ("ZAF", 33.0, 28.0),
+    ("KEN", 28.0, 16.0),
+    ("ETH", 22.0, 10.0),
+    ("EGY", 36.0, 35.0),
+    ("TUR", 32.0, 40.0),
+    ("SAU", 31.0, 42.0),
+    ("RUS", 37.0, 44.0),
+    ("POL", 34.0, 55.0),
+    ("BGD", 24.0, 18.0),
+]
+
+
+def who_fixture(
+    start_year: int,
+    end_year: int,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Generate a deterministic fixture DataFrame for 30 countries.
+
+    Produces synthetic but plausible values for:
+    - ``htn_prevalence_pct`` — hypertension prevalence (age-standardised %)
+    - ``htn_treatment_pct`` — hypertension treatment coverage (%)
+
+    Parameters
+    ----------
+    start_year, end_year:
+        Inclusive year range.
+    seed:
+        RNG seed for reproducibility.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: ``iso3c``, ``year``, ``htn_prevalence_pct``,
+        ``htn_treatment_pct``. Sorted by ``iso3c``, ``year``.
+    """
+    rng = np.random.default_rng(seed + 999)  # separate stream from WB fixture
+    years = list(range(start_year, end_year + 1))
+    denom = max(end_year - start_year, 1)
+
+    rows: list[dict] = []
+    for iso3c, base_prev, base_treat in _WHO_FIXTURE_COUNTRIES:
+        for year in years:
+            t = (year - start_year) / denom
+            prev = base_prev * (1.0 + 0.002 * t + rng.normal(0.0, 0.008))
+            treat = base_treat * (1.0 + 0.015 * t + rng.normal(0.0, 0.012))
+            rows.append({
+                "iso3c": iso3c,
+                "year": year,
+                "htn_prevalence_pct": float(np.clip(prev, 10.0, 70.0)),
+                "htn_treatment_pct": float(np.clip(treat, 5.0, 95.0)),
+            })
+
+    df = pd.DataFrame(rows)
+    return df.sort_values(["iso3c", "year"]).reset_index(drop=True)
 
 
 def filter_who_sex(df: pd.DataFrame) -> pd.DataFrame:
