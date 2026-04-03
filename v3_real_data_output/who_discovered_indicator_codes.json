@@ -1,0 +1,5 @@
+{
+  "htn_prevalence": "NCD_HYP_PREVALENCE_A",
+  "htn_treatment": "NCD_HYP_TREATMENT_A",
+  "htn_controlled": "TB_effective_treatment_coverage"
+}

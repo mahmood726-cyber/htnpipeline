@@ -1,0 +1,9 @@
+metric,value
+rows_raw,1500
+countries,30
+year_min,2015
+year_max,2024
+nonmissing_htn_prev,1350
+nonmissing_htn_treat,1350
+nonmissing_gdp,1500
+nonmissing_health_exp,1500
