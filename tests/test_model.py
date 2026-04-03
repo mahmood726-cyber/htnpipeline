@@ -108,3 +108,105 @@ class TestGibbsUniformThinning:
         assert len(r.alpha_draws) == n
         assert len(r.sigma_prev2_draws) == n
         assert len(r.latent_prev_draws) == n
+
+
+# ---------------------------------------------------------------------------
+# Task 6: Convergence diagnostics
+# ---------------------------------------------------------------------------
+
+from model.diagnostics import compute_rhat, compute_ess, run_diagnostics
+from model.counterfactual import compute_counterfactuals
+from model.truthcert import generate_bundle
+
+
+class TestRhat:
+    def test_good_chain_near_one(self):
+        rng = np.random.default_rng(42)
+        draws = rng.normal(0, 1, 1000)
+        assert abs(compute_rhat(draws) - 1.0) < 0.05
+
+    def test_bad_chain_above_threshold(self):
+        draws = np.concatenate([np.random.default_rng(1).normal(-5, 0.1, 500),
+                                np.random.default_rng(2).normal(5, 0.1, 500)])
+        assert compute_rhat(draws) > 1.1
+
+
+class TestESS:
+    def test_iid_draws_high_ess(self):
+        rng = np.random.default_rng(42)
+        draws = rng.normal(0, 1, 1000)
+        assert compute_ess(draws) > 800
+
+    def test_autocorrelated_draws_low_ess(self):
+        rng = np.random.default_rng(42)
+        draws = np.zeros(1000)
+        draws[0] = rng.normal()
+        for i in range(1, 1000):
+            draws[i] = 0.95 * draws[i-1] + rng.normal(0, 0.1)
+        assert compute_ess(draws) < 200
+
+
+class TestDiagnostics:
+    def test_run_diagnostics_returns_dict(self):
+        df = make_synthetic_panel()
+        g = StateSpaceGibbs(seed=42, n_iter=200, burn=50, thin=1)
+        result = g.fit(df)
+        diag = run_diagnostics(result)
+        assert "parameters" in diag
+        assert "overall_pass" in diag
+
+
+class TestCounterfactual:
+    def _get_result(self):
+        df = make_synthetic_panel(n_countries=5, n_years=3)
+        g = StateSpaceGibbs(seed=42, n_iter=200, burn=50, thin=1)
+        return g.fit(df)
+
+    def test_treatment_capped_at_100(self):
+        result = self._get_result()
+        cf = compute_counterfactuals(result, scenarios=[{"name": "plus_25pp", "shift_pp": 25}])
+        assert (cf["cf_treatment_plus_25pp"] <= 100.0).all()
+
+    def test_cri_width_positive(self):
+        result = self._get_result()
+        cf = compute_counterfactuals(result, scenarios=[{"name": "plus_25pp", "shift_pp": 25}])
+        assert (cf["cf_treatment_plus_25pp_high95"] >= cf["cf_treatment_plus_25pp_low95"]).all()
+
+    def test_custom_shift_works(self):
+        result = self._get_result()
+        cf = compute_counterfactuals(result, scenarios=[{"name": "custom_10", "shift_pp": 10}])
+        assert "cf_treatment_custom_10" in cf.columns
+
+    def test_target_80_scenario(self):
+        result = self._get_result()
+        cf = compute_counterfactuals(result, scenarios=[{"name": "target_80", "target_pct": 80}])
+        assert "cf_treatment_target_80" in cf.columns
+
+
+class TestTruthCertBundle:
+    def test_all_files_present(self, tmp_path):
+        df = make_synthetic_panel()
+        g = StateSpaceGibbs(seed=42, n_iter=100, burn=30, thin=1)
+        result = g.fit(df)
+        generate_bundle(result, df, bundle_dir=tmp_path, seed=42)
+        expected_files = [
+            "parameter_summary.csv", "posterior_draws.parquet",
+            "counterfactual.csv", "convergence.json",
+            "provenance.json", "panel_fitted.csv", "coverage_summary.csv",
+        ]
+        for fname in expected_files:
+            assert (tmp_path / fname).exists(), f"Missing: {fname}"
+
+    def test_provenance_has_required_fields(self, tmp_path):
+        df = make_synthetic_panel()
+        g = StateSpaceGibbs(seed=42, n_iter=100, burn=30, thin=1)
+        result = g.fit(df)
+        generate_bundle(result, df, bundle_dir=tmp_path, seed=42)
+        import json
+        with open(tmp_path / "provenance.json") as f:
+            prov = json.load(f)
+        assert "seed" in prov
+        assert "timestamp" in prov
+        assert "data_hash" in prov
+        assert "n_countries" in prov
+        assert prov["seed"] == 42
