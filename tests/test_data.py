@@ -75,5 +75,56 @@ class TestUserAgentHeaderSent(unittest.TestCase):
         self.assertEqual(sent_headers.get("User-Agent"), "TestAgent/1.0")
 
 
+import pytest
+import re
+from data.registry import IndicatorRegistry, validate_indicator_code
+
+
+class TestIndicatorCodeValidation:
+    def test_valid_codes_pass(self):
+        for code in ["NY.GDP.PCAP.CD", "NCD_HYP_PREVALENCE_A", "NCDMORT3070", "SH.XPD.CHEX.GD.ZS"]:
+            assert validate_indicator_code(code) == code
+
+    def test_path_traversal_rejected(self):
+        with pytest.raises(ValueError, match="Invalid indicator code"):
+            validate_indicator_code("../../../etc/passwd")
+
+    def test_odata_injection_rejected(self):
+        with pytest.raises(ValueError, match="Invalid indicator code"):
+            validate_indicator_code("' or 1 eq 1 --")
+
+    def test_empty_rejected(self):
+        with pytest.raises(ValueError, match="Invalid indicator code"):
+            validate_indicator_code("")
+
+    def test_too_long_rejected(self):
+        with pytest.raises(ValueError, match="Invalid indicator code"):
+            validate_indicator_code("A" * 81)
+
+
+class TestIndicatorRegistry:
+    def test_register_and_list(self):
+        reg = IndicatorRegistry()
+        @reg.register("test_ind", source="worldbank", code="TEST.CODE")
+        def fetch_test(start_year, end_year, config):
+            import pandas as pd
+            return pd.DataFrame({"iso3c": ["GBR"], "year": [2020], "test_ind": [42.0]})
+        assert "test_ind" in reg.list_indicators()
+        meta = reg.get_metadata("test_ind")
+        assert meta["source"] == "worldbank"
+        assert meta["code"] == "TEST.CODE"
+
+    def test_fetch_returns_dataframe(self):
+        reg = IndicatorRegistry()
+        @reg.register("gdp_test", source="worldbank", code="NY.GDP.PCAP.CD")
+        def fetch_gdp(start_year, end_year, config):
+            import pandas as pd
+            return pd.DataFrame({"iso3c": ["GBR", "USA"], "year": [2020, 2020], "gdp_test": [46000.0, 65000.0]})
+        from data.config import Config
+        df = reg.fetch("gdp_test", 2020, 2024, Config())
+        assert len(df) == 2
+        assert "gdp_test" in df.columns
+
+
 if __name__ == "__main__":
     unittest.main()
