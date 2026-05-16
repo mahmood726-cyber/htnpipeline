@@ -1,0 +1,10 @@
+{
+  "gdp_pc_usd": "worldbank",
+  "health_exp_pct_gdp": "worldbank",
+  "urban_pct": "worldbank",
+  "htn_prevalence_pct": "who",
+  "htn_treatment_pct": "who",
+  "cvd_mortality_30_70": "who",
+  "ihd_mort_rate": "who",
+  "stroke_mort_rate": "who"
+}
